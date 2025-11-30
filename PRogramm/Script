@@ -1,0 +1,147 @@
+import pytesseract as pytes
+import time
+import pyautogui as ag
+from PIL import Image, ImageDraw, ImageEnhance
+import autoit
+import os
+
+# =============================
+# CONFIGURATION
+# =============================
+pytes.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+OUTPUT_DIR = 'images'
+
+BUTTON_COORDS = {
+    "Options": (90, 900),
+    "Reincarnate_Button": (1485, 96),
+    "Yes_Button": (1027, 517),
+    "Skip_Animation": (960, 1100),
+    "Second_Reincarnate": (970, 750),
+    "Stats_Button": (250, 990),
+}
+
+# ✔ Your Qi box location
+# (left, top, width, height)
+QI_MULTI_REGION = (1300, 330, 170, 60)   # Enlarged for easier reading
+
+TESSERACT_CONFIG = '--oem 3 --psm 7 -c tessedit_char_whitelist=xX0123456789.'
+
+TARGET_QI_MULTIPLIER = 1500.00
+
+# Timing
+INITIAL_DELAY_SECONDS = 2
+SCREENSHOT_DELAY_SECONDS = 1
+POST_REINCARNATE_DELAY_SECONDS = 8
+OCR_RETRY_DELAY = 2
+
+# =============================
+# ENSURE FOLDERS EXIST
+# =============================
+if not os.path.exists(OUTPUT_DIR):
+    os.makedirs(OUTPUT_DIR)
+    print("Created images folder.")
+
+# =============================
+# CLICKER
+# =============================
+def click_element(name):
+    coords = BUTTON_COORDS.get(name)
+    if coords:
+        autoit.mouse_click("left", coords[0], coords[1])
+        print(f"[CLICK] {name}")
+    else:
+        print(f"[ERROR] No coords for {name}")
+
+
+def perform_reincarnation_sequence():
+    click_element("Options")
+    time.sleep(1)
+    click_element("Reincarnate_Button")
+    time.sleep(1)
+    click_element("Yes_Button")
+    time.sleep(1)
+    click_element("Skip_Animation")
+    time.sleep(1)
+    click_element("Second_Reincarnate")
+    time.sleep(1)
+    click_element("Stats_Button")
+    print("[INFO] Reincarnation sequence complete.")
+    time.sleep(POST_REINCARNATE_DELAY_SECONDS)
+
+# =============================
+# OCR
+# =============================
+def get_qi_multiplier():
+    screenshot_path = os.path.join(OUTPUT_DIR, "QiMulti.png")
+    debug_path = os.path.join(OUTPUT_DIR, "Qi_Box_Overlay.png")
+
+    # Capture region screenshot
+    ag.screenshot(screenshot_path, region=QI_MULTI_REGION)
+    time.sleep(0.2)
+
+    img = Image.open(screenshot_path)
+
+    # ✔ ENLARGE IMAGE (huge accuracy boost)
+    img = img.resize((img.width * 3, img.height * 3), Image.LANCZOS)
+
+    # Save enlarged screenshot
+    img.save(os.path.join(OUTPUT_DIR, "QiMulti_zoom.png"))
+
+    # OCR
+    raw = pytes.image_to_string(img, config=TESSERACT_CONFIG).strip()
+
+    # Clean
+    cleaned = (
+        raw.replace("x", "")
+           .replace("X", "")
+           .replace("O", "0")
+           .replace("o", "0")
+           .replace("I", "1")
+           .replace(",", ".")
+           .strip()
+    )
+
+    print(f"[OCR RAW] '{raw}'")
+    print(f"[OCR CLEANED] '{cleaned}'")
+
+    # If nothing was read
+    if cleaned == "":
+        print("[WARNING] OCR returned nothing.")
+        return None
+
+    # Try converting
+    try:
+        value = float(cleaned)
+        return value
+    except:
+        print(f"[ERROR] Invalid OCR number: '{cleaned}'")
+        return None
+
+# =============================
+# MAIN LOOP
+# =============================
+def main():
+    print("Starting in 2 seconds...")
+    time.sleep(INITIAL_DELAY_SECONDS)
+    print("Automation running...\n")
+
+    while True:
+        qi = get_qi_multiplier()
+
+        if qi is None:
+            print(f"[INFO] Retrying OCR in {OCR_RETRY_DELAY} seconds...\n")
+            time.sleep(OCR_RETRY_DELAY)
+            continue
+
+        print(f"[INFO] Current Qi: {qi}")
+
+        if qi < TARGET_QI_MULTIPLIER:
+            print("[INFO] Qi low → Reincarnating...\n")
+            perform_reincarnation_sequence()
+        else:
+            print(f"[SUCCESS] Qi reached {qi}! Stopping.")
+            break
+
+if __name__ == "__main__":
+    main()
